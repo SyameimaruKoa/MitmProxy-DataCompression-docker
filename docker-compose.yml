@@ -5,11 +5,15 @@ services:
     container_name: mitmproxy-compressor-container
 
     ports:
-      - "3126:3126"  # プロキシ通信用のポート
-      - "8081:8081"  # mitmwebのWeb UI用ポート
+      - "3126:3126"
+      - "8081:8081"
 
     volumes:
       - mitmproxy_certs:/root/.mitmproxy
+
+    environment:
+      # 'safe'(推奨), 'force_webp'(高速化), 'legacy'(旧デバイス互換) から選択
+      - PROXY_MODE=safe
 
     restart: unless-stopped
 

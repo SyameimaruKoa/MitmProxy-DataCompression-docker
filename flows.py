@@ -1,57 +1,132 @@
 #!/usr/bin/env python3
-from PIL import Image
-import io, time, gzip
+from PIL import Image, ImageFile
+import io, time, os
 import brotli
 
+# ==============================================================================
+# --- 設定 (ここを編集してプロキシの動作をカスタマイズ) ---
+# ==============================================================================
+
+# --- 共通設定 ---
+MIN_SIZE_TO_PROCESS_BYTES = 10240  # これ以下のサイズのファイルは処理しない (10KB)
+
+# --- モダンモード設定 (safe, force_webp) ---
+# JPEG/PNGからWebPへ変換する際の品質 (1-100, 数値が低いほど高圧縮・低画質)
+MODERN_WEBP_QUALITY = 50
+# JPEGを再圧縮する際の品質 (1-100)
+MODERN_JPEG_QUALITY = 10
+# PNGを再圧縮する際の圧縮レベル (0-9, 数値が高いほど高圧縮)
+MODERN_PNG_COMPRESS_LEVEL = 9
+# WebPを再圧縮する際の品質 (1-100)
+MODERN_WEBP_RECOMPRESS_QUALITY = 50
+
+# --- レガシーモード設定 (legacy) ---
+# 縮小する画像の最大幅 (ピクセル)
+LEGACY_MAX_WIDTH = 800
+# 縮小する画像の最大高さ (ピクセル)
+LEGACY_MAX_HEIGHT = 600
+# WebPからJPEGに変換する際の品質 (1-100, 高いほど高品質)
+LEGACY_JPEG_QUALITY = 80
+
+# ==============================================================================
+# --- これ以降のコードは通常、編集不要 ---
+# ==============================================================================
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+def handle_legacy_mode(flow):
+    """ 旧デバイス向けの処理 (WebP->JPEG変換, リサイズ) """
+    try:
+        ct = flow.response.headers.get("content-type", "")
+        if ct.startswith("image/webp") and flow.response.content:
+            ru = str(flow.request.url)
+            print(f"*** LEGACY MODE: webp to jpeg start {ru} ***")
+            start = time.time()
+            s = io.BytesIO(flow.response.content)
+            s2 = io.BytesIO()
+
+            img = Image.open(s)
+
+            if img.width > LEGACY_MAX_WIDTH or img.height > LEGACY_MAX_HEIGHT:
+                print(f"    Resizing from {img.width}x{img.height} to fit within {LEGACY_MAX_WIDTH}x{LEGACY_MAX_HEIGHT}")
+                img.thumbnail((LEGACY_MAX_WIDTH, LEGACY_MAX_HEIGHT), Image.Resampling.LANCZOS)
+
+            img.convert('RGB').save(s2, "jpeg", quality=LEGACY_JPEG_QUALITY, optimize=True)
+
+            flow.response.content = s2.getvalue()
+            flow.response.headers["Content-Type"] = "image/jpeg"
+
+            elapsed_time_ms = (time.time() - start) * 1000
+            print(f"    Converted to JPEG in {elapsed_time_ms:.0f}ms")
+
+    except Exception as e:
+        print(f"--- Error in legacy mode for {flow.request.url}: {e} ---")
+
+
+def handle_modern_modes(flow, proxy_mode):
+    """ 最新デバイス向けの処理 (データ削減) """
+    try:
+        if proxy_mode == 'force_webp':
+            supports_webp = True
+        else: # safeモード
+            supports_webp = "image/webp" in flow.request.headers.get("accept", "").lower()
+
+        if "content-type" in flow.response.headers and flow.response.content:
+            ct = str(flow.response.headers["content-type"])
+            cl = len(flow.response.content)
+
+            if cl > MIN_SIZE_TO_PROCESS_BYTES and ct.startswith("image/"):
+                ru = str(flow.request.url)
+                s = io.BytesIO(flow.response.content)
+                s2 = io.BytesIO()
+                start = time.time()
+                is_processed = False
+                new_ct = ct
+
+                img = Image.open(s)
+
+                if supports_webp and (ct.startswith("image/jpeg") or ct.startswith("image/png")):
+                    print(f"*** {ct.split('/')[1]} to webp start ({proxy_mode} mode) {ru} ***")
+                    img.save(s2, "webp", quality=MODERN_WEBP_QUALITY)
+                    flow.response.content = s2.getvalue()
+                    new_ct = "image/webp"
+                    flow.response.headers["Content-Type"] = new_ct
+                    is_processed = True
+
+                elif ct.startswith("image/jpeg"):
+                    img.save(s2, "jpeg", quality=MODERN_JPEG_QUALITY, optimize=True, progressive=True)
+                    flow.response.content = s2.getvalue()
+                    is_processed = True
+
+                elif ct.startswith("image/png"):
+                    img.convert(mode='P', palette=Image.ADAPTIVE).save(s2, "png", compress_level=MODERN_PNG_COMPRESS_LEVEL)
+                    flow.response.content = s2.getvalue()
+                    is_processed = True
+
+                elif ct.startswith("image/webp"):
+                    img.save(s2, "webp", quality=MODERN_WEBP_RECOMPRESS_QUALITY)
+                    flow.response.content = s2.getvalue()
+                    is_processed = True
+
+                if is_processed:
+                    cl2 = len(flow.response.content)
+                    if cl > 0:
+                        ratio_after = int(cl2 / cl * 100)
+                        saved_ratio = 100 - ratio_after
+                        elapsed_time_ms = (time.time() - start) * 1000
+                        original_kb = cl / 1024
+                        compressed_kb = cl2 / 1024
+                        print(f"*** {ct} -> {new_ct} | Size: {original_kb:.1f}KB -> {compressed_kb:.1f}KB ({ratio_after}%) | Saved: {saved_ratio}% | Time: {elapsed_time_ms:.0f}ms | URL: {ru} ***")
+    except Exception as e:
+        print(f"--- Error in modern mode for {flow.request.url}: {e} ---")
+
+# --- メインの処理 ---
 def response(flow):
-  # 変数をあらかじめ初期化して、UnboundLocalErrorを防ぐ
-  cl = 0
-  try:
-    # content-typeヘッダとcontent本体の両方がある場合のみ処理する
-    if "content-type" in flow.response.headers and flow.response.content:
-      ru = str(flow.request.url)
-      ct = str(flow.response.headers["content-type"])
-      cl = len(flow.response.content)
-
-      # サイズが10KBより大きい画像のみを対象とする
-      if cl > 10000:
-        s = io.BytesIO(flow.response.content)
-        s2 = io.BytesIO()
-        start = time.time()
-        
-        is_processed = False
-        # jpeg を quality 10/100 に変換する
-        if ct.startswith("image/jpeg"):
-          print(f"*** jpeg start {ru} ***")
-          img = Image.open(s)
-          img.save(s2, "jpeg", quality=10, optimize=True, progressive=True)
-          flow.response.content = s2.getvalue()
-          is_processed = True
-
-        # png を compress_level=9, 8bitカラーに変換する
-        elif ct.startswith("image/png"):
-          print(f"*** png start {ru} ***")
-          # Pillowのバージョンに依存しにくい古い書き方に戻す
-          img = Image.open(s).convert(mode='P', palette=Image.ADAPTIVE)
-          img.save(s2, "png", compress_level=9)
-          flow.response.content = s2.getvalue()
-          is_processed = True
-
-        # webp を quality 10/100 に変換する
-        elif ct.startswith("image/webp"):
-          print(f"*** webp start {ru} ***")
-          img = Image.open(s)
-          img.save(s2, "webp", quality=10)
-          flow.response.content = s2.getvalue()
-          is_processed = True
-        
-        # 画像圧縮が実行された場合のみ、ログを出力する
-        if is_processed:
-          cl2  = len(flow.response.content)
-          if cl > 0:
-            i = int(cl2 / cl * 100)
-            elapsed_time = time.time() - start
-            print(f"*** compressed {i} percent, size = {cl2}/{cl} bytes, {ru} is processed, {elapsed_time:.4f} sec ***")
-
-  except Exception as e:
-    print(f"--- Error processing {flow.request.url}: {e} ---")
+    proxy_mode = os.environ.get('PROXY_MODE', 'safe').lower()
+    if proxy_mode not in ['safe', 'force_webp', 'legacy']:
+        print(f"--- Invalid PROXY_MODE: {proxy_mode} ---")
+        return
+    if proxy_mode == 'legacy':
+        handle_legacy_mode(flow)
+    else:
+        handle_modern_modes(flow, proxy_mode)

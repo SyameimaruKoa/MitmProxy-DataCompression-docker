@@ -2,15 +2,21 @@
 
 ## 概要 (Overview)
 
-このプロジェクトは、`mitmproxy` と `Pillow-SIMD` を使用して、通信経路上でリアルタイムに画像を圧縮するプロキシサーバーを Docker で構築します。Web ブラウジング時のデータ通信量を削減することを目的としています。
+このプロジェクトは、`mitmproxy` と `Pillow-SIMD` を使用して、通信経路上でリアルタイムに画像を最適化するプロキシサーバーを Docker で構築します。
+
+データ通信量を削減する「モダンモード」と、古いデバイスでの表示を補助する「レガシーモード」を備えており、目的に応じて動作を切り替えられます。
 
 Tailscale やローカルネットワークなど、プライベートな環境での利用を想定しています。
 
 ## 特徴 (Features)
 
 - **Docker Compose 対応**: `docker compose up` だけで簡単に起動・更新できます。
+- **高度なカスタマイズ性**: `flows.py`の先頭で、画質やリサイズ上限などのパラメータを簡単に調整できます。
+- **動作モード切替**: 用途に応じて 3 つのモード（`safe`, `force_webp`, `legacy`）を選択可能です。
 - **Web UI**: `mitmweb` により、ブラウザからリアルタイムで通信フローを監視できます。
-- **高速な画像圧縮**: SIMD 命令で高速化された `Pillow-SIMD` を使用し、JPEG, PNG, WebP 形式の画像を圧縮します。
+- **WebP 自動変換**: モダンモードでは、クライアント**明確**が対応している場合に JPEG/PNG を WebP 形式に自動変換し、データを削減します。`<br>`※大体のブラウザではすべてのファイルに対応と指示を出し、webp を明確に指定しないので変換されないことが多いです
+- **旧デバイス互換性**: レガシーモードでは、WebP 画像を JPEG に変換し、巨大な画像をリサイズすることで、古いブラウザでの閲覧を補助します。
+- **高速な画像処理**: SIMD 命令で高速化された `Pillow-SIMD` を使用します。
 - **幅広い CPU 互換性**: ビルド環境の CPU を自動判別し、AVX2 対応 CPU では高速に、非対応 CPU でも互換モードで動作します。
 - **簡単な証明書インストール**: ブラウザから `http://mitm.it` にアクセスするだけで CA 証明書を導入できます。
 
@@ -24,8 +30,8 @@ Tailscale やローカルネットワークなど、プライベートな環境�
 1. このリポジトリをクローンします。
 
    ```bash
-   git clone git@github.com:SyameimaruKoa/MitmProxy-DataCompression-docker.git
-   cd MitmProxy-DataCompression-docker
+   git clone https://github.com/SyameimaruKoa/mitmproxy-DataCompression-docker.git
+   cd mitmproxy-DataCompression-docker
    ```
 
 2. コンテナをバックグラウンドで起動します。
@@ -36,17 +42,45 @@ Tailscale やローカルネットワークなど、プライベートな環境�
 
    **Note:** `docker-compose.yml` に `build` が指定されているため、初回実行時や、`Dockerfile`・`flows.py` などのソースファイルに変更があった場合は、このコマンドが自動でイメージの再ビルドを行います。常にビルドを強制したい場合のみ、`--build` オプションを追加してください。
 
-3. ログを確認するには:
-
-   ```bash
-   docker compose logs -f
-   ```
-
-4. 停止するには:
+3. 停止時は
 
    ```bash
    docker compose down
    ```
+
+### 以下は確認用です
+
+ログを確認するには
+
+```bash
+docker compose logs -f
+```
+
+## ⚙️ 動作モードとカスタマイズ
+
+### 動作モードの切り替え
+
+`docker-compose.yml` ファイル内の環境変数 `PROXY_MODE` の値を変更することで、プロキシの動作モードを切り替えられます。
+
+```yaml
+# docker-compose.yml
+services:
+  mitmproxy:
+    --中略--
+    environment:
+      # 'safe', 'force_webp', 'legacy' から選択
+      - PROXY_MODE=safe
+```
+
+- **`safe` モード (デフォルト・推奨)** : **バランス重視版** 。クライアントのブラウザが送信する `Accept`ヘッダを尊重し、互換性とデータ削減を両立します。
+- **`force_webp` モード** : **データ削減特化版** 。JPEG/PNG を常に WebP へ強制変換し、データ削減を最大化します（WebP 非対応ブラウザでは画像が映りません）。
+- **`legacy` モード** : **旧デバイス互換モード** 。WebP 画像を JPEG に変換し、巨大な画像を縮小することで、古いブラウザでの表示を補助します。
+
+モードを変更した後は、`docker compose up -d` を実行すれば設定が反映されます。
+
+### 詳細なカスタマイズ
+
+`flows.py`ファイルの先頭にある「設定」セクションで、各モードの画質やリサイズの上限値などを細かく調整できます。
 
 ## 🛠️ 使い方 (Usage)
 
@@ -79,7 +113,7 @@ Tailscale やローカルネットワークなど、プライベートな環境�
 
 - `docker-compose.yml`: Docker コンテナの構成（ポート、ボリュームなど）を定義します。
 - `Dockerfile`: `mitmproxy`と依存ライブラリをインストールし、コンテナイメージをビルドします。
-- `flows.py`: 画像を検知して圧縮処理を行う Python スクリプトです。
+- `flows.py`: 画像を検知して最適化処理を行う Python スクリプトです。
 
 ## 開発経緯 (Development Story)
 
