@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from PIL import Image, ImageFile
-import io, time, os
+import io, time, os, gzip
 import brotli
 
 # ==============================================================================
@@ -65,16 +65,17 @@ def handle_legacy_mode(flow):
 def handle_modern_modes(flow, proxy_mode):
     """ 最新デバイス向けの処理 (データ削減) """
     try:
-        if proxy_mode == 'force_webp':
-            supports_webp = True
-        else: # safeモード
-            supports_webp = "image/webp" in flow.request.headers.get("accept", "").lower()
-
         if "content-type" in flow.response.headers and flow.response.content:
             ct = str(flow.response.headers["content-type"])
             cl = len(flow.response.content)
 
-            if cl > MIN_SIZE_TO_PROCESS_BYTES and ct.startswith("image/"):
+            # --- 画像処理 ---
+            if ct.startswith("image/") and cl > MIN_SIZE_TO_PROCESS_BYTES:
+                if proxy_mode == 'force_webp':
+                    supports_webp = True
+                else:
+                    supports_webp = "image/webp" in flow.request.headers.get("accept", "").lower()
+
                 ru = str(flow.request.url)
                 s = io.BytesIO(flow.response.content)
                 s2 = io.BytesIO()
@@ -116,6 +117,21 @@ def handle_modern_modes(flow, proxy_mode):
                         original_kb = cl / 1024
                         compressed_kb = cl2 / 1024
                         print(f"*** {ct} -> {new_ct} | Size: {original_kb:.1f}KB -> {compressed_kb:.1f}KB ({ratio_after}%) | Saved: {saved_ratio}% | Time: {elapsed_time_ms:.0f}ms | URL: {ru} ***")
+                return # 画像処理が終わったら、以降の処理はしない
+
+            # --- テキスト圧縮処理 ---
+            TEXT_TYPES = ("text/", "application/javascript", "application/json", "application/xml")
+            if "content-encoding" not in flow.response.headers and any(ct.startswith(t) for t in TEXT_TYPES):
+                ru = str(flow.request.url)
+                print(f"*** Compressing text content (gzip) for {ru} ***")
+                original_size = len(flow.response.content)
+                compressed_content = gzip.compress(flow.response.content)
+                compressed_size = len(compressed_content)
+                if compressed_size < original_size:
+                    flow.response.content = compressed_content
+                    flow.response.headers["Content-Encoding"] = "gzip"
+                    print(f"    Text compressed: {original_size / 1024:.1f}KB -> {compressed_size / 1024:.1f}KB")
+
     except Exception as e:
         print(f"--- Error in modern mode for {flow.request.url}: {e} ---")
 

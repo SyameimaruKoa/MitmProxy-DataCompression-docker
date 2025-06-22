@@ -1,4 +1,4 @@
-# Real-time Image Compression Proxy with mitmproxy
+# Real-time Image and Text Optimization Proxy with mitmproxy
 
 ## 概要 (Overview)
 
@@ -13,6 +13,7 @@ Tailscale やローカルネットワークなど、プライベートな環境�
 - **Docker Compose 対応**: `docker compose up` だけで簡単に起動・更新できます。
 - **高度なカスタマイズ性**: `flows.py`の先頭で、画質やリサイズ上限などのパラメータを簡単に調整できます。
 - **動作モード切替**: 用途に応じて 3 つのモード（`safe`, `force_webp`, `legacy`）を選択可能です。
+- **確実なテキスト圧縮**: モダンモードでは、サーバーが圧縮し忘れたテキストコンテンツ（HTML, CSS, JS 等）もプロキシが確実に gzip 圧縮します。
 - **Web UI**: `mitmweb` により、ブラウザからリアルタイムで通信フローを監視できます。
 - **WebP 自動変換**: モダンモードでは、クライアント**明確**が対応している場合に JPEG/PNG を WebP 形式に自動変換し、データを削減します。`<br>`※大体のブラウザではすべてのファイルに対応と指示を出し、webp を明確に指定しないので変換されないことが多いです
 - **旧デバイス互換性**: レガシーモードでは、WebP 画像を JPEG に変換し、巨大な画像をリサイズすることで、古いブラウザでの閲覧を補助します。
