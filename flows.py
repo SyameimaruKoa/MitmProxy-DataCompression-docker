@@ -17,7 +17,8 @@ MODERN_WEBP_QUALITY = 50
 MODERN_JPEG_QUALITY = 10
 # PNGを再圧縮する際の圧縮レベル (0-9, 数値が高いほど高圧縮)
 MODERN_PNG_COMPRESS_LEVEL = 9
-MODERN_WEBP_RECOMPRESS_QUALITY = 10
+# WebPを再圧縮する際の品質 (1-100)
+MODERN_WEBP_RECOMPRESS_QUALITY = 50
 
 # --- レガシーモード設定 (legacy) ---
 # 縮小する画像の最大幅 (ピクセル)
@@ -51,26 +52,21 @@ def handle_legacy_mode(flow):
                 img.thumbnail((LEGACY_MAX_WIDTH, LEGACY_MAX_HEIGHT), Image.Resampling.LANCZOS)
 
             img.convert('RGB').save(s2, "jpeg", quality=LEGACY_JPEG_QUALITY, optimize=True)
-
             flow.response.content = s2.getvalue()
             flow.response.headers["Content-Type"] = "image/jpeg"
-
             elapsed_time_ms = (time.time() - start) * 1000
             print(f"    Converted to JPEG in {elapsed_time_ms:.0f}ms")
-
     except Exception as e:
         print(f"--- Error in legacy mode for {flow.request.url}: {e} ---")
-
 
 def handle_modern_modes(flow, proxy_mode):
     """ 最新デバイス向けの処理 (データ削減) """
     try:
         if "content-type" in flow.response.headers and flow.response.content:
             ct = str(flow.response.headers["content-type"])
-            cl = len(flow.response.content)
 
-            # --- 画像処理 ---
-            if ct.startswith("image/") and cl > MIN_SIZE_TO_PROCESS_BYTES:
+            # --- 画像処理 (SVGを除外) ---
+            if ct.startswith("image/") and not ct.startswith("image/svg") and len(flow.response.content) > MIN_SIZE_TO_PROCESS_BYTES:
                 if proxy_mode == 'force_webp':
                     supports_webp = True
                 else:
@@ -82,7 +78,6 @@ def handle_modern_modes(flow, proxy_mode):
                 start = time.time()
                 is_processed = False
                 new_ct = ct
-
                 img = Image.open(s)
 
                 if supports_webp and (ct.startswith("image/jpeg") or ct.startswith("image/png")):
@@ -92,23 +87,21 @@ def handle_modern_modes(flow, proxy_mode):
                     new_ct = "image/webp"
                     flow.response.headers["Content-Type"] = new_ct
                     is_processed = True
-
                 elif ct.startswith("image/jpeg"):
                     img.save(s2, "jpeg", quality=MODERN_JPEG_QUALITY, optimize=True, progressive=True)
                     flow.response.content = s2.getvalue()
                     is_processed = True
-
                 elif ct.startswith("image/png"):
                     img.convert(mode='P', palette=Image.ADAPTIVE).save(s2, "png", compress_level=MODERN_PNG_COMPRESS_LEVEL)
                     flow.response.content = s2.getvalue()
                     is_processed = True
-
                 elif ct.startswith("image/webp"):
                     img.save(s2, "webp", quality=MODERN_WEBP_RECOMPRESS_QUALITY)
                     flow.response.content = s2.getvalue()
                     is_processed = True
 
                 if is_processed:
+                    cl = len(s.getvalue())
                     cl2 = len(flow.response.content)
                     if cl > 0:
                         ratio_after = int(cl2 / cl * 100)
@@ -119,18 +112,33 @@ def handle_modern_modes(flow, proxy_mode):
                         print(f"*** {ct} -> {new_ct} | Size: {original_kb:.1f}KB -> {compressed_kb:.1f}KB ({ratio_after}%) | Saved: {saved_ratio}% | Time: {elapsed_time_ms:.0f}ms | URL: {ru} ***")
                 return # 画像処理が終わったら、以降の処理はしない
 
-            # --- テキスト圧縮処理 ---
-            TEXT_TYPES = ("text/", "application/javascript", "application/json", "application/xml")
+            # --- テキスト圧縮処理 (SVGも対象に含める) ---
+            TEXT_TYPES = ("text/", "application/javascript", "application/json", "application/xml", "image/svg+xml")
             if "content-encoding" not in flow.response.headers and any(ct.startswith(t) for t in TEXT_TYPES):
                 ru = str(flow.request.url)
-                print(f"*** Compressing text content (gzip) for {ru} ***")
                 original_size = len(flow.response.content)
+
+                if original_size < 1024: # 1KB未満の小さなテキストは圧縮しない
+                    return
+
                 compressed_content = gzip.compress(flow.response.content)
                 compressed_size = len(compressed_content)
                 if compressed_size < original_size:
                     flow.response.content = compressed_content
                     flow.response.headers["Content-Encoding"] = "gzip"
-                    print(f"    Text compressed: {original_size / 1024:.1f}KB -> {compressed_size / 1024:.1f}KB")
+
+                    # --- ここからがログ出力の変更箇所 ---
+                    ratio_after = int(compressed_size / original_size * 100)
+                    saved_ratio = 100 - ratio_after
+                    original_kb = original_size / 1024
+                    compressed_kb = compressed_size / 1024
+
+                    print(
+                        f"*** Gzip Compress {ct} | "
+                        f"Size: {original_kb:.1f}KB -> {compressed_kb:.1f}KB ({ratio_after}%) | "
+                        f"Saved: {saved_ratio}% | "
+                        f"URL: {ru} ***"
+                    )
 
     except Exception as e:
         print(f"--- Error in modern mode for {flow.request.url}: {e} ---")

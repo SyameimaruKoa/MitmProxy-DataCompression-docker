@@ -39,7 +39,7 @@ CMD ["mitmweb", \
     "-s", "flows.py", \
     "--set", "stream_large_bodies=10m", \
     "--ignore-hosts", "(mzstatic|apple|icloud|mobilesuica|crashlytic|google-analytics|merpay|paypay|rakuten-bank|fate|colopl|rakuten-sec|line|kyash|plexure)", \
-    "--set", "block_global=true", \
+    # "--set", "block_global=true", \
     "--set", "flow_detail=1", \
     "--set", "http2=false", \
     "--showhost"]
