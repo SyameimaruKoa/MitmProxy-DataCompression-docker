@@ -1,26 +1,37 @@
-# ベースイメージの指定
-FROM ubuntu:latest
+# ベースイメージとして最新のAlmaLinux 9を指定
+FROM almalinux:9
 
-# 環境変数の設定
-ENV DEBIAN_FRONTEND=noninteractive
-
-# パッケージのインストール
-RUN apt-get update && \
-    apt-get install -y \
-        python3 \
-        python3-pip \
-        python3-dev \
-        build-essential \
-        libjpeg-dev \
-        zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Pythonライブラリのインストール
-RUN pip3 install --break-system-packages mitmproxy brotli pillow-simd
-
-# 作業ディレクトリの作成と設定
+# 作業ディレクトリを作成・指定
 WORKDIR /app
 
-# コンテナ起動時に自動実行するコマンド
-# --web-host 0.0.0.0 を付けることで、コンテナの外からWeb UIにアクセスできるようになる
-CMD ["mitmweb", "--web-host", "0.0.0.0"]
+# 必要なパッケージのインストール
+RUN dnf -y update && \
+    dnf -y install dnf-plugins-core && \
+    dnf config-manager --set-enabled crb && \
+    dnf -y groupinstall "Development Tools" && \
+    dnf -y install zlib-devel libjpeg-turbo-devel python3-devel python3-pip libwebp-devel && \
+    dnf clean all
+
+# pipをアップグレードし、必要なPythonパッケージをインストール
+RUN python3 -m pip install --upgrade pip && \
+    CC="cc -mavx2" python3 -m pip install -U --force-reinstall pillow-simd --global-option="build_ext" --global-option="--enable-webp" && \
+    python3 -m pip install mitmproxy brotli
+
+# flows.py スクリプトをコンテナにコピー
+COPY flows.py .
+
+# mitmproxyが使用するポートを公開 (プロキシ用とWeb UI用)
+EXPOSE 3126 8081
+
+# コンテナ起動時にmitmwebを実行するようデフォルトコマンドを変更
+CMD ["mitmweb", \
+    "--web-host", "0.0.0.0", \
+    "--listen-port", "3126", \
+    "--ssl-insecure", \
+    "-s", "flows.py", \
+    "--set", "stream_large_bodies=10m", \
+    "--ignore-hosts", "(mzstatic|apple|icloud|mobilesuica|crashlytic|google-analytics|merpay|paypay|rakuten-bank|fate|colopl|rakuten-sec|line|kyash|plexure)", \
+    "--set", "block_global=true", \
+    "--set", "flow_detail=1", \
+    "--set", "http2=false", \
+    "--showhost"]

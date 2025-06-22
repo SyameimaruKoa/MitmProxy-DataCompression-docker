@@ -1,0 +1,17 @@
+services:
+  mitmproxy:
+    build: .
+    image: mitmproxy-compressor
+    container_name: mitmproxy-compressor-container
+
+    ports:
+      - "3126:3126"  # プロキシ通信用のポート
+      - "8081:8081"  # mitmwebのWeb UI用ポート
+
+    volumes:
+      - mitmproxy_certs:/root/.mitmproxy
+
+    restart: unless-stopped
+
+volumes:
+  mitmproxy_certs:
