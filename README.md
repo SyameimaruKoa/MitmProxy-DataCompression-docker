@@ -6,7 +6,7 @@
 
 Tailscale やローカルネットワークなど、プライベートな環境での利用を想定しています。
 
-##　特徴 (Features)
+## 特徴 (Features)
 
 - **Docker Compose 対応**: `docker compose up`だけで簡単に起動できます。
 - **Web UI**: `mitmweb`により、ブラウザからリアルタイムで通信フローを監視できます。
