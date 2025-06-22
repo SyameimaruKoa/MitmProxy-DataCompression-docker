@@ -17,8 +17,7 @@ MODERN_WEBP_QUALITY = 50
 MODERN_JPEG_QUALITY = 10
 # PNGを再圧縮する際の圧縮レベル (0-9, 数値が高いほど高圧縮)
 MODERN_PNG_COMPRESS_LEVEL = 9
-# WebPを再圧縮する際の品質 (1-100)
-MODERN_WEBP_RECOMPRESS_QUALITY = 50
+MODERN_WEBP_RECOMPRESS_QUALITY = 10
 
 # --- レガシーモード設定 (legacy) ---
 # 縮小する画像の最大幅 (ピクセル)
