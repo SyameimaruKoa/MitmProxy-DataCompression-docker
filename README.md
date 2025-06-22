@@ -2,16 +2,17 @@
 
 ## 概要 (Overview)
 
-このプロジェクトは、`mitmproxy`と`Pillow-SIMD`を使用して、通信経路上でリアルタイムに画像を圧縮するプロキシサーバーを Docker で構築します。Web ブラウジング時のデータ通信量を削減することを目的としています。
+このプロジェクトは、`mitmproxy` と `Pillow-SIMD` を使用して、通信経路上でリアルタイムに画像を圧縮するプロキシサーバーを Docker で構築します。Web ブラウジング時のデータ通信量を削減することを目的としています。
 
 Tailscale やローカルネットワークなど、プライベートな環境での利用を想定しています。
 
 ## 特徴 (Features)
 
-- **Docker Compose 対応**: `docker compose up`だけで簡単に起動できます。
-- **Web UI**: `mitmweb`により、ブラウザからリアルタイムで通信フローを監視できます。
-- **高速な画像圧縮**: SIMD 命令で高速化された`Pillow-SIMD`を使用し、JPEG,PNG,WebP 形式の画像を圧縮します。
-- **簡単な証明書インストール**: ブラウザから`http://mitm.it`にアクセスするだけで CA 証明書を導入できます。
+- **Docker Compose 対応**: `docker compose up` だけで簡単に起動・更新できます。
+- **Web UI**: `mitmweb` により、ブラウザからリアルタイムで通信フローを監視できます。
+- **高速な画像圧縮**: SIMD 命令で高速化された `Pillow-SIMD` を使用し、JPEG, PNG, WebP 形式の画像を圧縮します。
+- **幅広い CPU 互換性**: ビルド環境の CPU を自動判別し、AVX2 対応 CPU では高速に、非対応 CPU でも互換モードで動作します。
+- **簡単な証明書インストール**: ブラウザから `http://mitm.it` にアクセスするだけで CA 証明書を導入できます。
 
 ## 必要なもの (Prerequisites)
 
@@ -27,11 +28,13 @@ Tailscale やローカルネットワークなど、プライベートな環境�
    cd MitmProxy-DataCompression-docker
    ```
 
-2. コンテナをビルドして、バックグラウンドで起動します。
+2. コンテナをバックグラウンドで起動します。
 
    ```bash
    docker compose up -d
    ```
+
+   **Note:** `docker-compose.yml` に `build` が指定されているため、初回実行時や、`Dockerfile`・`flows.py` などのソースファイルに変更があった場合は、このコマンドが自動でイメージの再ビルドを行います。常にビルドを強制したい場合のみ、`--build` オプションを追加してください。
 
 3. ログを確認するには:
 

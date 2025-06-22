@@ -12,10 +12,18 @@ RUN dnf -y update && \
     dnf -y install zlib-devel libjpeg-turbo-devel python3-devel python3-pip libwebp-devel && \
     dnf clean all
 
-# pipをアップグレードし、必要なPythonパッケージをインストール
+# pipをアップグレードし、共通のパッケージをインストール
 RUN python3 -m pip install --upgrade pip && \
-    CC="cc -mavx2" python3 -m pip install -U --force-reinstall pillow-simd --global-option="build_ext" --global-option="--enable-webp" && \
     python3 -m pip install mitmproxy brotli
+
+# CPUがAVX2に対応しているか確認し、Pillow-SIMDのインストール方法を分岐
+RUN if grep -q 'avx2' /proc/cpuinfo; then \
+    echo "AVX2 supported. Compiling Pillow-SIMD with AVX2 optimizations."; \
+    CC="cc -mavx2" python3 -m pip install -U --force-reinstall pillow-simd --global-option="build_ext" --global-option="--enable-webp"; \
+    else \
+    echo "AVX2 not supported. Compiling Pillow-SIMD without AVX2 optimizations."; \
+    python3 -m pip install -U --force-reinstall pillow-simd --global-option="build_ext" --global-option="--enable-webp"; \
+    fi
 
 # flows.py スクリプトをコンテナにコピー
 COPY flows.py .
