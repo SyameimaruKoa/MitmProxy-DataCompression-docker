@@ -109,7 +109,13 @@ def handle_modern_modes(flow, proxy_mode):
                         elapsed_time_ms = (time.time() - start) * 1000
                         original_kb = cl / 1024
                         compressed_kb = cl2 / 1024
-                        print(f"*** {ct} -> {new_ct} | Size: {original_kb:.1f}KB -> {compressed_kb:.1f}KB ({ratio_after}%) | Saved: {saved_ratio}% | Time: {elapsed_time_ms:.0f}ms | URL: {ru} ***")
+                        print(
+                            f"*** {ct} -> {new_ct} | "
+                            f"Size: {original_kb:.1f}KB -> {compressed_kb:.1f}KB | "
+                            f"Saved: {saved_ratio}% | "
+                            f"Time: {elapsed_time_ms:.0f}ms | "
+                            f"URL: {ru} ***"
+                        )
                 return # 画像処理が終わったら、以降の処理はしない
 
             # --- テキスト圧縮処理 (SVGも対象に含める) ---
@@ -135,7 +141,7 @@ def handle_modern_modes(flow, proxy_mode):
 
                     print(
                         f"*** Gzip Compress {ct} | "
-                        f"Size: {original_kb:.1f}KB -> {compressed_kb:.1f}KB ({ratio_after}%) | "
+                        f"Size: {original_kb:.1f}KB -> {compressed_kb:.1f}KB | "
                         f"Saved: {saved_ratio}% | "
                         f"URL: {ru} ***"
                     )
