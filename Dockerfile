@@ -35,6 +35,7 @@ EXPOSE 3126 8081
 CMD ["mitmweb", \
     "--web-host", "0.0.0.0", \
     "--listen-port", "3126", \
+    # "--mode", "transparent", \
     "--ssl-insecure", \
     "-s", "flows.py", \
     "--set", "stream_large_bodies=10m", \
