@@ -6,7 +6,7 @@ WORKDIR /app
 
 # 必要なパッケージのインストール
 RUN dnf -y update && \
-    dnf -y install dnf-plugins-core && \
+    dnf -y install dnf-plugins-core nmap-ncat && \
     dnf config-manager --set-enabled crb && \
     dnf -y groupinstall "Development Tools" && \
     dnf -y install zlib-devel libjpeg-turbo-devel python3-devel python3-pip libwebp-devel && \
@@ -35,7 +35,7 @@ EXPOSE 3126 8081
 CMD ["mitmweb", \
     "--web-host", "0.0.0.0", \
     "--listen-port", "3126", \
-    # "--mode", "transparent", \
+    "--mode", "transparent", \
     "--ssl-insecure", \
     "-s", "flows.py", \
     "--set", "stream_large_bodies=10m", \

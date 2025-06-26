@@ -1,18 +1,62 @@
+# 初回起動時限定
+# docker run -it --rm -v mitmproxy-datacompression-docker_tailscale_state:/var/lib/tailscale --name tailscale-auth-temp --hostname mitm-proxy-node tailscale/tailscale:latest sh -c "tailscaled --tun=userspace-networking & sleep 3 && tailscale up && wait"
+
+networks:
+  proxy-net:
+    driver: bridge
+    enable_ipv6: false # IPv6を無効化し、Mitmproxyの502エラーを防ぐ
+
+volumes:
+  mitmproxy_certs: # Mitmproxyの証明書を永続化
+  tailscale_state: # Tailscaleの認証情報（身分証）を永続化
+
 services:
   mitmproxy:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.mitmproxy
     image: mitmproxy-compressor
     container_name: mitmproxy-compressor-container
     pull_policy: never
     ports:
-      - "3126:3126"
-      - "8081:8081"
+      - "3126:3126" # プロキシ用ポート
+      - "8081:8081" # Web UI用ポート
     volumes:
       - mitmproxy_certs:/root/.mitmproxy
     environment:
-      # 'safe'(推奨), 'force_webp'(高速化), 'legacy'(旧デバイス互換) から選択
-      - PROXY_MODE=safe
+      # おぬしのカスタムスクリプト用の環境変数
+      - PROXY_MODE=force_webp
+    networks:
+      - proxy-net
     restart: unless-stopped
+    # tailscaleが起動する前に、このコンテナの準備が整うのを待つための健康診断
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "3126"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-volumes:
-  mitmproxy_certs:
+  tailscale:
+    build:
+      context: .
+      dockerfile: Dockerfile.tailscale # カスタムentrypoint.shを組み込むため
+    container_name: tailscale-container
+    hostname: "mitm-proxy-node" # Tailscale上でのデバイス名
+    environment:
+      - HTTP_PROXY=http://mitmproxy:3126
+      - HTTPS_PROXY=http://mitmproxy:3126
+      - TS_HOSTNAME=mitm-proxy-node
+    volumes:
+      - mitmproxy_certs:/certs:ro          # mitmproxyの証明書を読み込む
+      - tailscale_state:/var/lib/tailscale # tailscaleの身分証を保存/読み込み
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - sys_module
+    networks:
+      - proxy-net
+    # mitmproxyサービスが「健康(healthy)」状態になるまで起動を待つ
+    depends_on:
+      mitmproxy:
+        condition: service_healthy
+    restart: unless-stopped

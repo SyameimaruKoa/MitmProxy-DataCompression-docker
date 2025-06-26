@@ -1,0 +1,11 @@
+# Dockerfile.tailscale
+FROM tailscale/tailscale:latest
+
+# 作成した起動スクリプトをコンテナ内にコピー
+COPY entrypoint.sh /entrypoint.sh
+
+# 起動スクリプトを実行可能にする
+RUN chmod +x /entrypoint.sh
+
+# コンテナ起動時にこのスクリプトが実行されるように設定
+ENTRYPOINT ["/entrypoint.sh"]

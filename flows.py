@@ -151,10 +151,18 @@ def handle_modern_modes(flow, proxy_mode):
 
 # --- メインの処理 ---
 def response(flow):
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★ ここに、Tailscale通信をバイパスする聖域を作るのじゃ！ ★★★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    if "tailscale.com" in flow.request.host:
+        print(f"--- Bypassing Tailscale traffic for {flow.request.host} ---")
+        return # 宛先ホストに "tailscale.com" が含まれていたら、何もせず処理を終了
+    
     proxy_mode = os.environ.get('PROXY_MODE', 'safe').lower()
     if proxy_mode not in ['safe', 'force_webp', 'legacy']:
         print(f"--- Invalid PROXY_MODE: {proxy_mode} ---")
         return
+
     if proxy_mode == 'legacy':
         handle_legacy_mode(flow)
     else:
