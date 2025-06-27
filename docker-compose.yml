@@ -25,6 +25,7 @@ services:
       - "8081:8081" # Web UI用ポート
     volumes:
       - mitmproxy_certs:/root/.mitmproxy
+      - ./flows.py:/root/.mitmproxy/flows.py # ★ ここを追加するのじゃ！ ★
     environment:
       # おぬしのカスタムスクリプト用の環境変数
       - PROXY_MODE=force_webp
