@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 from PIL import Image, ImageFile
 import io, time, os, gzip
-import brotli
+# brotliは使われていないので削除するのじゃ
+# import brotli
 
 # ==============================================================================
 # --- 設定 (ここを編集してプロキシの動作をカスタマイズ) ---
@@ -19,6 +20,14 @@ MODERN_JPEG_QUALITY = 10
 MODERN_PNG_COMPRESS_LEVEL = 9
 # WebPを再圧縮する際の品質 (1-100)
 MODERN_WEBP_RECOMPRESS_QUALITY = 50
+
+# --- 節約最優先モード設定 (economy_first) ---
+# 全ての画像をWebPへ変換する際の品質 (1-100)
+ECONOMY_WEBP_QUALITY = 20
+# WebP画像を再圧縮する際の品質 (1-100)
+ECONOMY_WEBP_RECOMPRESS_QUALITY = 20
+# 解像度の最大制限 (ピクセル数)
+ECONOMY_MAX_PIXELS = 5_000_000 # 5メガピクセル
 
 # --- レガシーモード設定 (legacy) ---
 # 縮小する画像の最大幅 (ピクセル)
@@ -67,7 +76,8 @@ def handle_modern_modes(flow, proxy_mode):
 
             # --- 画像処理 (SVGを除外) ---
             if ct.startswith("image/") and not ct.startswith("image/svg") and len(flow.response.content) > MIN_SIZE_TO_PROCESS_BYTES:
-                if proxy_mode == 'force_webp':
+                # economy_firstとforce_webpモードでは常にWebPをサポートすると仮定
+                if proxy_mode == 'force_webp' or proxy_mode == 'economy_first':
                     supports_webp = True
                 else:
                     supports_webp = "image/webp" in flow.request.headers.get("accept", "").lower()
@@ -80,25 +90,50 @@ def handle_modern_modes(flow, proxy_mode):
                 new_ct = ct
                 img = Image.open(s)
 
-                if supports_webp and (ct.startswith("image/jpeg") or ct.startswith("image/png")):
-                    print(f"*** {ct.split('/')[1]} to webp start ({proxy_mode} mode) {ru} ***")
-                    img.save(s2, "webp", quality=MODERN_WEBP_QUALITY)
+                # 品質設定をモードに応じて選択
+                # economy_firstモードでは、WebPへの変換/再圧縮のみ考慮
+                webp_quality = ECONOMY_WEBP_QUALITY if proxy_mode == 'economy_first' else MODERN_WEBP_QUALITY
+                # jpeg_quality, png_compress_levelはeconomy_firstでは使われない
+                jpeg_quality = MODERN_JPEG_QUALITY
+                png_compress_level = MODERN_PNG_COMPRESS_LEVEL
+                webp_recompress_quality = ECONOMY_WEBP_RECOMPRESS_QUALITY if proxy_mode == 'economy_first' else MODERN_WEBP_RECOMPRESS_QUALITY
+
+                # 節約最優先モード特有の処理 (解像度制限とWebP強制変換)
+                if proxy_mode == 'economy_first':
+                    if img.width * img.height > ECONOMY_MAX_PIXELS:
+                        print(f"    Resizing for 5MP limit from {img.width}x{img.height}")
+                        scale = (ECONOMY_MAX_PIXELS / (img.width * img.height)) ** 0.5
+                        new_width = int(img.width * scale)
+                        new_height = int(img.height * scale)
+                        img.thumbnail((new_width, new_height), Image.Resampling.LANCZOS)
+                        print(f"    Resized to {img.width}x{img.height}")
+
+                    print(f"*** Converting/Recompressing to webp ({proxy_mode} mode) {ru} ***")
+                    img.save(s2, "webp", quality=webp_quality)
                     flow.response.content = s2.getvalue()
                     new_ct = "image/webp"
                     flow.response.headers["Content-Type"] = new_ct
                     is_processed = True
-                elif ct.startswith("image/jpeg"):
-                    img.save(s2, "jpeg", quality=MODERN_JPEG_QUALITY, optimize=True, progressive=True)
-                    flow.response.content = s2.getvalue()
-                    is_processed = True
-                elif ct.startswith("image/png"):
-                    img.convert(mode='P', palette=Image.ADAPTIVE).save(s2, "png", compress_level=MODERN_PNG_COMPRESS_LEVEL)
-                    flow.response.content = s2.getvalue()
-                    is_processed = True
-                elif ct.startswith("image/webp"):
-                    img.save(s2, "webp", quality=MODERN_WEBP_RECOMPRESS_QUALITY)
-                    flow.response.content = s2.getvalue()
-                    is_processed = True
+                else: # safeまたはforce_webpモード
+                    if supports_webp and (ct.startswith("image/jpeg") or ct.startswith("image/png")):
+                        print(f"*** {ct.split('/')[1]} to webp start ({proxy_mode} mode) {ru} ***")
+                        img.save(s2, "webp", quality=webp_quality)
+                        flow.response.content = s2.getvalue()
+                        new_ct = "image/webp"
+                        flow.response.headers["Content-Type"] = new_ct
+                        is_processed = True
+                    elif ct.startswith("image/jpeg"):
+                        img.save(s2, "jpeg", quality=jpeg_quality, optimize=True, progressive=True)
+                        flow.response.content = s2.getvalue()
+                        is_processed = True
+                    elif ct.startswith("image/png"):
+                        img.convert(mode='P', palette=Image.ADAPTIVE).save(s2, "png", compress_level=png_compress_level)
+                        flow.response.content = s2.getvalue()
+                        is_processed = True
+                    elif ct.startswith("image/webp"):
+                        img.save(s2, "webp", quality=webp_recompress_quality)
+                        flow.response.content = s2.getvalue()
+                        is_processed = True
 
                 if is_processed:
                     cl = len(s.getvalue())
@@ -152,7 +187,7 @@ def handle_modern_modes(flow, proxy_mode):
 # --- メインの処理 ---
 def response(flow):
     proxy_mode = os.environ.get('PROXY_MODE', 'safe').lower()
-    if proxy_mode not in ['safe', 'force_webp', 'legacy']:
+    if proxy_mode not in ['safe', 'force_webp', 'legacy', 'economy_first']:
         print(f"--- Invalid PROXY_MODE: {proxy_mode} ---")
         return
     if proxy_mode == 'legacy':

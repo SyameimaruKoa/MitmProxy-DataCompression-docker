@@ -10,7 +10,7 @@ services:
     volumes:
       - mitmproxy_certs:/root/.mitmproxy
     environment:
-      # 'safe'(推奨), 'force_webp'(高速化), 'legacy'(旧デバイス互換) から選択
+      # 'safe'(推奨), 'force_webp'(データ削減), 'economy_first'(節約最優先), 'legacy'(旧デバイス互換) から選択
       - PROXY_MODE=safe
     restart: unless-stopped
 
