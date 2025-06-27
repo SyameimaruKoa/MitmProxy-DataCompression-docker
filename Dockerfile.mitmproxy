@@ -35,12 +35,13 @@ EXPOSE 3126 8081
 CMD ["mitmweb", \
     "--web-host", "0.0.0.0", \
     "--listen-port", "3126", \
-    "--mode", "transparent", \
+    #"--mode", "transparent", \
     "--ssl-insecure", \
     "-s", "flows.py", \
     "--set", "stream_large_bodies=10m", \
-    "--ignore-hosts", "(mzstatic|apple|icloud|mobilesuica|crashlytic|google-analytics|merpay|paypay|rakuten-bank|fate|colopl|rakuten-sec|line|kyash|plexure)", \
-    # "--set", "block_global=true", \
+    "--ignore-hosts", "(mzstatic|apple|icloud|mobilesuica|crashlytic|google-analytics|merpay|paypay|rakuten-bank|fate|colopl|rakuten-sec|line|kyash|plexure|tailscale)", \
+    "--set", "block_global=false", \
     "--set", "flow_detail=1", \
     "--set", "http2=false", \
-    "--showhost"]
+    "--showhost", \
+    "-rawtcp"]

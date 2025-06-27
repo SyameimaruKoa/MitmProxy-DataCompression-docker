@@ -16,10 +16,25 @@ update-ca-certificates
 
 echo "証明書のインストール、完了じゃ。"
 
-
 # --- デーモンの召喚 ---
 # 事前認証済みのため、ただ静かにデーモンを起動するだけ。
 # ボリュームにある「身分証」を読み込んで、自動でネットワークに参加する。
 
 echo "Tailscaleデーモンを起動する (事前認証済みモード)..."
 exec tailscaled --tun=userspace-networking
+# 司令官が号令をかけるまでの、慈悲の5秒
+sleep 5
+
+# Tailscale自身が我々に示した、完璧なる神託の呪文を詠唱！
+echo "[TAILSCALE] Bringing tailscale up with auth key..."
+tailscale up \
+    --auth-key=${TS_AUTHKEY} \
+    --hostname=mitm-proxy-node \
+    --accept-dns=false \
+    --accept-routes \
+    --advertise-routes=0.0.0.0/0 \
+    --advertise-exit-node=true
+echo "[TAILSCALE] Setup complete. Waiting..."
+
+# デーモンが終了するのを待つ
+wait $!

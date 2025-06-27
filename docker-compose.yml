@@ -1,5 +1,5 @@
 # 初回起動時限定
-# docker run -it --rm -v mitmproxy-datacompression-docker_tailscale_state:/var/lib/tailscale --name tailscale-auth-temp --hostname mitm-proxy-node tailscale/tailscale:latest sh -c "tailscaled --tun=userspace-networking & sleep 3 && tailscale up && wait"
+# docker run -it --rm -v mitmproxy-datacompression-docker_tailscale_state:/var/lib/tailscale --name tailscale-auth-temp --hostname mitm-proxy-node tailscale/tailscale:latest sh -c "tailscaled --tun=userspace-networking & sleep 3 && echo 'URLにアクセスしてデバイスを登録してください' && tailscale up --accept-dns=false --accept-routes --advertise-routes=0.0.0.0/0 --advertise-exit-node=true"
 
 networks:
   proxy-net:
@@ -7,8 +7,10 @@ networks:
     enable_ipv6: false # IPv6を無効化し、Mitmproxyの502エラーを防ぐ
 
 volumes:
-  mitmproxy_certs: # Mitmproxyの証明書を永続化
-  tailscale_state: # Tailscaleの認証情報（身分証）を永続化
+  mitmproxy_certs:
+  tailscale_state:
+    name: mitmproxy-datacompression-docker_tailscale_state
+    external: true
 
 services:
   mitmproxy:
@@ -45,7 +47,7 @@ services:
     environment:
       - HTTP_PROXY=http://mitmproxy:3126
       - HTTPS_PROXY=http://mitmproxy:3126
-      - TS_HOSTNAME=mitm-proxy-node
+      # - TS_HOSTNAME=mitm-proxy-node
     volumes:
       - mitmproxy_certs:/certs:ro          # mitmproxyの証明書を読み込む
       - tailscale_state:/var/lib/tailscale # tailscaleの身分証を保存/読み込み
