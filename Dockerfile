@@ -17,12 +17,13 @@ RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install mitmproxy brotli
 
 # CPUがAVX2に対応しているか確認し、Pillow-SIMDのインストール方法を分岐
-RUN if grep -q 'avx2' /proc/cpuinfo; then \
+RUN if grep -q 'avx2' /proc/cpuinfo; \
+    then \
     echo "AVX2 supported. Compiling Pillow-SIMD with AVX2 optimizations."; \
-    CC="cc -mavx2" python3 -m pip install -U --force-reinstall pillow-simd --global-option="build_ext" --global-option="--enable-webp"; \
+    CC="cc -mavx2" python3 -m pip install -U --force-reinstall pillow-simd --config-settings="--build-option=build_ext" --config-settings="--build-option=--enable-webp"; \
     else \
     echo "AVX2 not supported. Compiling Pillow-SIMD without AVX2 optimizations."; \
-    python3 -m pip install -U --force-reinstall pillow-simd --global-option="build_ext" --global-option="--enable-webp"; \
+    python3 -m pip install -U --force-reinstall pillow-simd --config-settings="--build-option=build_ext" --config-settings="--build-option=--enable-webp"; \
     fi
 
 # flows.py スクリプトをコンテナにコピー
